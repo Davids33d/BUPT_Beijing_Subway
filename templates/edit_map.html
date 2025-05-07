@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>地铁地图编辑 - 地铁路线查询系统</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        #map {
+            width: 100%;
+            height: 600px;
+        }
+        .edit-tools {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        .edit-tool-btn {
+            margin: 5px;
+        }
+        .edit-form {
+            margin-top: 15px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            display: none;
+        }
+        .edit-section {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">地铁路线查询系统</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">首页</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/edit">编辑地图</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/admin">管理</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <h1 class="mb-4">地铁地图编辑</h1>
+        
+        <div class="alert alert-info" role="alert">
+            <strong>编辑模式</strong> - 在此页面可以添加、编辑或删除地铁站点和连接。
+        </div>
+        
+        <div class="row">
+            <div class="col-md-8">
+                <div id="map"></div>
+            </div>
+            <div class="col-md-4">
+                <div class="edit-tools">
+                    <h3>编辑工具</h3>
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-primary edit-tool-btn" onclick="showForm('add-station')">添加站点</button>
+                        <button class="btn btn-success edit-tool-btn" onclick="showForm('add-line')">添加线路</button>
+                        <button class="btn btn-danger edit-tool-btn" onclick="showForm('delete-station')">删除站点</button>
+                        <button class="btn btn-warning edit-tool-btn" onclick="showForm('delete-line')">删除线路</button>
+                    </div>
+                </div>
+                
+                <!-- 添加站点表单 -->
+                <div id="add-station-form" class="edit-form">
+                    <h4>添加新站点</h4>
+                    <div class="mb-3">
+                        <label for="station-name" class="form-label">站点名称</label>
+                        <input type="text" class="form-control" id="station-name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="station-line" class="form-label">所属线路</label>
+                        <input type="text" class="form-control" id="station-line" required placeholder="例如: 地铁1号线">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">坐标点选择</label>
+                        <p>在地图上点击选择位置，或手动输入坐标：</p>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="station-longitude" placeholder="经度">
+                            <input type="text" class="form-control" id="station-latitude" placeholder="纬度">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="addStation()">添加站点</button>
+                    <button class="btn btn-secondary" onclick="hideForm('add-station')">取消</button>
+                </div>
+                
+                <!-- 添加线路表单 -->
+                <div id="add-line-form" class="edit-form">
+                    <h4>添加线路及时刻表</h4>
+                    <div class="mb-3">
+                        <label for="line-name" class="form-label">线路名称</label>
+                        <input type="text" class="form-control" id="line-name" required placeholder="例如: 地铁1号线(苹果园-四惠)">
+                    </div>
+                    <div class="mb-3">
+                        <label for="line-color" class="form-label">线路颜色</label>
+                        <input type="color" class="form-control form-control-color" id="line-color" value="#FF0000" title="选择线路颜色">
+                        <small class="form-text text-muted">选择线路在地图上显示的颜色</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="line-speed" class="form-label">线路平均速度 (km/h)</label>
+                        <input type="number" class="form-control" id="line-speed" min="10" max="120" step="0.1" value="40" required>
+                        <small class="form-text text-muted">设置线路的平均运行速度，用于计算站间行驶时间</small>
+                    </div>
+                    
+                    <!-- 简化后的站点和距离信息表单 -->
+                    <div class="mb-3">
+                        <h5>站点和距离信息</h5>
+                        <div class="mb-3">
+                            <label for="stations-sequence" class="form-label">站点序列</label>
+                            <textarea class="form-control" id="stations-sequence" rows="2" required placeholder="请输入站点序列，用空格分隔。例如：西直门 积水潭 鼓楼大街 安定门 雍和宫"></textarea>
+                            <small class="form-text text-muted">请按顺序输入沿线各站点名称，用空格分隔</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="distances-sequence" class="form-label">站点间距离</label>
+                            <textarea class="form-control" id="distances-sequence" rows="2" required placeholder="请输入相邻站点之间的距离(米)，用空格分隔。例如：1200 850 760 1100 920 1300 950"></textarea>
+                            <small class="form-text text-muted">距离数量应比站点数量少1个</small>
+                        </div>
+                        <!-- 预览按钮 -->
+                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="previewStationDistances()">预览站点距离</button>
+                        <div id="distance-preview" class="mt-2" style="display: none;">
+                            <div class="card">
+                                <div class="card-header">站点距离预览</div>
+                                <div class="card-body">
+                                    <div id="distance-preview-content" style="max-height: 200px; overflow-y: auto;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <h5 class="mt-4">时刻表信息</h5>
+                    <ul class="nav nav-tabs mb-3" id="timetableTab" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="workday-start-tab" data-bs-toggle="tab" data-bs-target="#workday-start-pane" type="button" role="tab" aria-controls="workday-start-pane" aria-selected="true">工作日-起始站</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="workday-end-tab" data-bs-toggle="tab" data-bs-target="#workday-end-pane" type="button" role="tab" aria-controls="workday-end-pane" aria-selected="false">工作日-终点站</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="weekend-start-tab" data-bs-toggle="tab" data-bs-target="#weekend-start-pane" type="button" role="tab" aria-controls="weekend-start-pane" aria-selected="false">非工作日-起始站</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="weekend-end-tab" data-bs-toggle="tab" data-bs-target="#weekend-end-pane" type="button" role="tab" aria-controls="weekend-end-pane" aria-selected="false">非工作日-终点站</button>
+                        </li>
+                    </ul>
+                    
+                    <div class="tab-content" id="timetableTabContent">
+                        <div class="tab-pane fade show active" id="workday-start-pane" role="tabpanel" aria-labelledby="workday-start-tab" tabindex="0">
+                            <div class="mb-3">
+                                <label for="workday-start-timetable" class="form-label">工作日起始站时刻表数据</label>
+                                <textarea class="form-control" id="workday-start-timetable" rows="6" placeholder="格式如下：&#10;6: 0 9 18 26 34 42 50 58&#10;7: 6 14 22 30 38 46 54&#10;..."></textarea>
+                                <small class="form-text text-muted">每行格式为"小时: 分钟1 分钟2 分钟3 ..."</small>
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="workday-end-pane" role="tabpanel" aria-labelledby="workday-end-tab" tabindex="0">
+                            <div class="mb-3">
+                                <label for="workday-end-timetable" class="form-label">工作日终点站时刻表数据</label>
+                                <textarea class="form-control" id="workday-end-timetable" rows="6" placeholder="格式如下：&#10;6: 0 9 18 26 34 42 50 58&#10;7: 6 14 22 30 38 46 54&#10;..."></textarea>
+                                <small class="form-text text-muted">每行格式为"小时: 分钟1 分钟2 分钟3 ..."</small>
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="weekend-start-pane" role="tabpanel" aria-labelledby="weekend-start-tab" tabindex="0">
+                            <div class="mb-3">
+                                <label for="weekend-start-timetable" class="form-label">非工作日起始站时刻表数据</label>
+                                <textarea class="form-control" id="weekend-start-timetable" rows="6" placeholder="格式如下：&#10;6: 0 9 18 26 34 42 50 58&#10;7: 6 14 22 30 38 46 54&#10;..."></textarea>
+                                <small class="form-text text-muted">每行格式为"小时: 分钟1 分钟2 分钟3 ..."</small>
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="weekend-end-pane" role="tabpanel" aria-labelledby="weekend-end-tab" tabindex="0">
+                            <div class="mb-3">
+                                <label for="weekend-end-timetable" class="form-label">非工作日终点站时刻表数据</label>
+                                <textarea class="form-control" id="weekend-end-timetable" rows="6" placeholder="格式如下：&#10;6: 0 9 18 26 34 42 50 58&#10;7: 6 14 22 30 38 46 54&#10;..."></textarea>
+                                <small class="form-text text-muted">每行格式为"小时: 分钟1 分钟2 分钟3 ..."</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button class="btn btn-success" onclick="addLine()">添加线路</button>
+                    <button class="btn btn-secondary" onclick="hideForm('add-line')">取消</button>
+                </div>
+                
+                <!-- 删除站点表单 -->
+                <div id="delete-station-form" class="edit-form">
+                    <h4>删除站点</h4>
+                    <div class="mb-3">
+                        <label for="delete-station-select" class="form-label">要删除的站点名称</label>
+                        <input type="text" class="form-control" id="delete-station-select" required placeholder="例如: 西单">
+                    </div>
+                    <button class="btn btn-danger" onclick="deleteStation()">删除站点</button>
+                    <button class="btn btn-secondary" onclick="hideForm('delete-station')">取消</button>
+                </div>
+                
+                <!-- 删除线路表单 -->
+                <div id="delete-line-form" class="edit-form">
+                    <h4>删除线路</h4>
+                    <div class="mb-3">
+                        <label for="delete-line-select" class="form-label">要删除的线路名称</label>
+                        <input type="text" class="form-control" id="delete-line-select" required placeholder="例如: 地铁1号线八通线(环球度假区--福寿岭)">
+                    </div>
+                    <div class="alert alert-warning" role="alert">
+                        <strong>警告：</strong>删除线路将同时删除该线路的所有时刻表数据和站点连接关系！
+                    </div>
+                    <button class="btn btn-danger" onclick="deleteLine()">删除线路</button>
+                    <button class="btn btn-secondary" onclick="hideForm('delete-line')">取消</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 初始化变量
+        let map;
+        let markers = [];
+        let selectedCoordinates = null;
+        let stationData = {};
+        
+        // 初始化地图
+        function initMap() {
+            mapboxgl.accessToken = '{{ mapbox_token }}';
+            map = new mapboxgl.Map({
+                container: 'map',
+                style: 'mapbox://styles/mapbox/streets-v12',
+                center: [116.404, 39.915], // 默认中心点（北京）
+                zoom: 12,
+                // 添加北京区域的最大边界限制
+                maxBounds: [
+                    [115.7, 39.4], // 西南角
+                    [117.4, 41.0]  // 东北角
+                ]
+            });
+            
+            // 添加导航控件
+            map.addControl(new mapboxgl.NavigationControl());
+            
+            // 地图点击事件，用于选择坐标
+            map.on('click', function(e) {
+                selectedCoordinates = [e.lngLat.lng, e.lngLat.lat];
+                
+                // 清除现有临时标记
+                markers.forEach(marker => marker.remove());
+                markers = [];
+                
+                // 添加新的临时标记
+                const newMarker = new mapboxgl.Marker({color: '#FF0000'})
+                    .setLngLat(selectedCoordinates)
+                    .addTo(map);
+                markers.push(newMarker);
+                
+                // 更新坐标输入框
+                const activeForm = document.querySelector('.edit-form[style*="display: block"]');
+                if (activeForm) {
+                    const id = activeForm.id;
+                    if (id === 'add-station-form') {
+                        document.getElementById('station-longitude').value = selectedCoordinates[0].toFixed(6);
+                        document.getElementById('station-latitude').value = selectedCoordinates[1].toFixed(6);
+                    }
+                }
+            });
+            
+            // 加载地图初始数据
+            map.on('load', function() {
+                loadStationsData();
+                loadLinesData();
+            });
+        }
+        
+        // 加载站点数据
+        function loadStationsData() {
+            fetch('/api/stations/points')
+                .then(response => response.json())
+                .then(data => {
+                    // 保存站点数据用于表单
+                    const stations = {};
+                    data.features.forEach(feature => {
+                        stations[feature.properties.id] = {
+                            name: feature.properties.station_name,
+                            coordinates: feature.geometry.coordinates
+                        };
+                    });
+                    stationData = stations;
+                    
+                    // 在地图上显示站点
+                    if (map.getSource('stations')) {
+                        map.getSource('stations').setData(data);
+                    } else {
+                        map.addSource('stations', {
+                            type: 'geojson',
+                            data: data
+                        });
+                        
+                        map.addLayer({
+                            id: 'station-points',
+                            type: 'circle',
+                            source: 'stations',
+                            paint: {
+                                'circle-radius': 6,
+                                'circle-color': '#3887be',
+                                'circle-stroke-width': 2,
+                                'circle-stroke-color': '#ffffff'
+                            }
+                        });
+                        
+                        // 添加站点标签
+                        map.addLayer({
+                            id: 'station-labels',
+                            type: 'symbol',
+                            source: 'stations',
+                            layout: {
+                                'text-field': ['get', 'station_name'],
+                                'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
+                                'text-offset': [0, 1.5],
+                                'text-anchor': 'top'
+                            },
+                            paint: {
+                                'text-color': '#000000',
+                                'text-halo-color': '#ffffff',
+                                'text-halo-width': 1
+                            }
+                        });
+                    }
+                })
+                .catch(error => console.error('加载站点数据失败:', error));
+        }
+        
+        // 加载线路数据
+        function loadLinesData() {
+            // 加载并显示线路地理数据
+            fetch('/api/stations/lines')
+                .then(response => response.json())
+                .then(data => {
+                    if (!data || !data.features || !data.features.length) {
+                        console.error("线路地理数据无效或为空");
+                        return;
+                    }
+                    
+                    console.log(`成功获取 ${data.features.length} 条线路地理数据`);
+                    
+                    // 在地图上显示线路
+                    if (map.getSource('subway-lines')) {
+                        map.getSource('subway-lines').setData(data);
+                    } else {
+                        map.addSource('subway-lines', {
+                            type: 'geojson',
+                            data: data
+                        });
+                        
+                        map.addLayer({
+                            id: 'subway-lines-layer',
+                            type: 'line',
+                            source: 'subway-lines',
+                            layout: {
+                                'line-join': 'round',
+                                'line-cap': 'round'
+                            },
+                            paint: {
+                                'line-color': ['get', 'stroke'],
+                                'line-width': 3
+                            }
+                        }, 'station-points'); // 确保线路显示在站点下方
+                        
+                        // 添加线路悬停和点击事件
+                        map.on('mouseenter', 'subway-lines-layer', function() {
+                            map.getCanvas().style.cursor = 'pointer';
+                        });
+                        
+                        map.on('mouseleave', 'subway-lines-layer', function() {
+                            map.getCanvas().style.cursor = '';
+                        });
+                        
+                        map.on('click', 'subway-lines-layer', function(e) {
+                            const props = e.features[0].properties;
+                            const lineName = props.line_name || '未知线路';
+                            const color = props.stroke || '#888888';
+                            new mapboxgl.Popup()
+                                .setLngLat(e.lngLat)
+                                .setHTML(`
+                                    <h3>线路: ${lineName}</h3>
+                                    <div style="background-color: ${color}; width: 20px; height: 20px; display: inline-block; margin-right: 5px;"></div>
+                                    <span>线路颜色: ${color}</span>
+                                `)
+                                .addTo(map);
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error("加载线路地理数据出错:", error);
+                });
+        }
+        
+        // 显示表单
+        function showForm(formType) {
+            // 隐藏所有表单
+            document.querySelectorAll('.edit-form').forEach(form => {
+                form.style.display = 'none';
+            });
+            
+            // 显示选定的表单
+            document.getElementById(`${formType}-form`).style.display = 'block';
+        }
+        
+        // 隐藏表单
+        function hideForm(formType) {
+            document.getElementById(`${formType}-form`).style.display = 'none';
+        }
+        
+        // 添加站点
+        function addStation() {
+            const name = document.getElementById('station-name').value;
+            const line = document.getElementById('station-line').value;
+            const longitude = document.getElementById('station-longitude').value;
+            const latitude = document.getElementById('station-latitude').value;
+            
+            if (!name || !line || !longitude || !latitude) {
+                alert('请填写完整的站点信息！');
+                return;
+            }
+            
+            const coordinates = `${longitude},${latitude}`;
+            
+            fetch('/api/edit/stations', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    name: name,
+                    line: line,
+                    coordinates: coordinates
+                }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    // 重新加载站点数据
+                    loadStationsData();
+                    // 清空表单
+                    document.getElementById('station-name').value = '';
+                    document.getElementById('station-longitude').value = '';
+                    document.getElementById('station-latitude').value = '';
+                    hideForm('add-station');
+                } else {
+                    alert('添加站点失败: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('添加站点请求失败:', error);
+                alert('添加站点请求失败，请查看控制台获取详细信息。');
+            });
+        }
+        
+        // 添加线路
+        function addLine() {
+            const lineName = document.getElementById('line-name').value;
+            const lineColor = document.getElementById('line-color').value;
+            const stationsSequence = document.getElementById('stations-sequence').value;
+            const distancesSequence = document.getElementById('distances-sequence').value;
+            const lineSpeed = document.getElementById('line-speed').value; // 获取线路速度
+            
+            // 获取四种时刻表数据
+            const workdayStartTimetable = document.getElementById('workday-start-timetable').value;
+            const workdayEndTimetable = document.getElementById('workday-end-timetable').value;
+            const weekendStartTimetable = document.getElementById('weekend-start-timetable').value;
+            const weekendEndTimetable = document.getElementById('weekend-end-timetable').value;
+            
+            if (!lineName || !stationsSequence || !distancesSequence) {
+                alert('请填写线路名称、站点序列和距离序列！');
+                return;
+            }
+            
+            // 处理站点和距离数据
+            const stations = stationsSequence.trim().split(/\s+/);
+            const distances = distancesSequence.trim().split(/\s+/).map(Number);
+            
+            // 验证数据有效性
+            if (stations.length < 2) {
+                alert('站点序列至少需要包含2个站点');
+                return;
+            }
+            
+            if (distances.length !== stations.length - 1) {
+                alert(`距离数量(${distances.length})应该比站点数量(${stations.length})少1个`);
+                return;
+            }
+            
+            // 检查距离值是否合法
+            const invalidDistances = distances.filter(d => isNaN(d) || d <= 0);
+            if (invalidDistances.length > 0) {
+                alert('距离序列中包含无效值，请确保所有距离都是有效的正数');
+                return;
+            }
+            
+            // 增加对特别大或特别小的距离值的检查
+            const tooSmallDistances = distances.filter(d => d < 100); // 小于100米可能是错误
+            const tooLargeDistances = distances.filter(d => d > 5000); // 大于5000米可能是错误
+            
+            if (tooSmallDistances.length > 0 || tooLargeDistances.length > 0) {
+                let warningMessage = '警告：检测到可能不合理的距离值：\n';
+                
+                if (tooSmallDistances.length > 0) {
+                    warningMessage += `- ${tooSmallDistances.length}个距离小于100米\n`;
+                }
+                
+                if (tooLargeDistances.length > 0) {
+                    warningMessage += `- ${tooLargeDistances.length}个距离大于5000米\n`;
+                }
+                
+                warningMessage += '\n地铁站间距通常在500米到3000米之间。\n确定继续提交这些距离数据吗？';
+                
+                if (!confirm(warningMessage)) {
+                    return;
+                }
+            }
+            
+            // 构建站点之间的连接关系数据
+            const stationConnections = [];
+            for (let i = 0; i < stations.length - 1; i++) {
+                stationConnections.push({
+                    from: stations[i],
+                    to: stations[i + 1],
+                    distance: distances[i]
+                });
+            }
+            
+            // 解析时刻表数据
+            const parsedTimetableData = {
+                workday_start: parseTimetableData(workdayStartTimetable),
+                workday_end: parseTimetableData(workdayEndTimetable),
+                weekend_start: parseTimetableData(weekendStartTimetable),
+                weekend_end: parseTimetableData(weekendEndTimetable)
+            };
+            
+            fetch('/api/edit/lines', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    line_name: lineName,
+                    color: lineColor,
+                    stations: stations,
+                    station_connections: stationConnections,
+                    start_station: stations[0],  // 第一个站点作为起始站
+                    end_station: stations[stations.length - 1],  // 最后一个站点作为终点站
+                    timetable_data: parsedTimetableData,
+                    avg_speed: parseFloat(lineSpeed)  // 添加线路平均速度
+                }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    // 重新加载线路数据
+                    loadLinesData();
+                    // 清空表单
+                    document.getElementById('line-name').value = '';
+                    document.getElementById('stations-sequence').value = '';
+                    document.getElementById('distances-sequence').value = '';
+                    document.getElementById('workday-start-timetable').value = '';
+                    document.getElementById('workday-end-timetable').value = '';
+                    document.getElementById('weekend-start-timetable').value = '';
+                    document.getElementById('weekend-end-timetable').value = '';
+                    hideForm('add-line');
+                } else {
+                    alert('添加线路失败: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('添加线路请求失败:', error);
+                alert('添加线路请求失败，请查看控制台获取详细信息。');
+            });
+        }
+        
+        // 解析时刻表数据
+        function parseTimetableData(timetableText) {
+            if (!timetableText || timetableText.trim() === '') {
+                return null;
+            }
+            
+            const result = {};
+            const lines = timetableText.trim().split('\n');
+            
+            for (const line of lines) {
+                const parts = line.trim().split(':');
+                if (parts.length === 2) {
+                    const hour = parts[0].trim();
+                    const minutes = parts[1].trim().split(' ').filter(m => m.trim() !== '').map(m => parseInt(m.trim()));
+                    
+                    if (hour && minutes.length > 0) {
+                        result[hour] = minutes;
+                    }
+                }
+            }
+            
+            return result;
+        }
+        
+        // 删除站点
+        function deleteStation() {
+            const stationName = document.getElementById('delete-station-select').value;
+            
+            if (!stationName) {
+                alert('请输入要删除的站点名称！');
+                return;
+            }
+            
+            // 直接发送删除请求，不再显示确认对话框
+            fetch(`/api/edit/stations/${stationName}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    // 重新加载站点数据
+                    loadStationsData();
+                    // 清空表单
+                    document.getElementById('delete-station-select').value = '';
+                    hideForm('delete-station');
+                } else {
+                    alert('删除站点失败: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('删除站点请求失败:', error);
+                alert('删除站点请求失败，请查看控制台获取详细信息。');
+            });
+        }
+        
+        // 删除线路
+        function deleteLine() {
+            const lineName = document.getElementById('delete-line-select').value;
+            
+            if (!lineName) {
+                alert('请输入要删除的线路名称！');
+                return;
+            }
+            
+            // 确认删除
+            if (confirm(`确定要删除线路"${lineName}"吗？此操作将同时删除该线路的所有时刻表数据和站点连接关系！`)) {
+                // 发送删除请求
+                fetch(`/api/edit/lines/${encodeURIComponent(lineName)}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // 简化提示，只显示删除成功
+                        alert(`线路"${lineName}"删除成功`);
+                        
+                        // 重新加载线路数据
+                        loadLinesData();
+                        // 重新加载站点数据（因为某些站点可能被删除）
+                        loadStationsData();
+                        // 清空表单
+                        document.getElementById('delete-line-select').value = '';
+                        hideForm('delete-line');
+                    } else {
+                        alert('删除线路失败: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('删除线路请求失败:', error);
+                    alert('删除线路请求失败，请查看控制台获取详细信息。');
+                });
+            }
+        }
+        
+        // 预览站点距离
+        function previewStationDistances() {
+            const stationsSequence = document.getElementById('stations-sequence').value.trim();
+            const distancesSequence = document.getElementById('distances-sequence').value.trim();
+            
+            if (!stationsSequence || !distancesSequence) {
+                alert('请先填写站点序列和距离序列！');
+                return;
+            }
+            
+            const stations = stationsSequence.split(/\s+/);
+            const distances = distancesSequence.split(/\s+/);
+            
+            if (distances.length !== stations.length - 1) {
+                alert('距离数量应比站点数量少1个，请检查输入！');
+                return;
+            }
+            
+            let previewContent = '<ul class="list-group">';
+            for (let i = 0; i < distances.length; i++) {
+                previewContent += `<li class="list-group-item">${stations[i]} → ${stations[i + 1]}: ${distances[i]} 米</li>`;
+            }
+            previewContent += '</ul>';
+            
+            document.getElementById('distance-preview-content').innerHTML = previewContent;
+            document.getElementById('distance-preview').style.display = 'block';
+        }
+        
+        // 初始化页面
+        document.addEventListener('DOMContentLoaded', function() {
+            initMap();
+        });
+    </script>
+</body>
+</html>
+``` 

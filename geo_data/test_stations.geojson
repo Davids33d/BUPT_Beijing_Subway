@@ -1,0 +1,57 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [116.3912, 39.9073]
+      },
+      "properties": {
+        "name": "天安门东",
+        "id": "s001",
+        "line": "1号线",
+        "is_transfer": false
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [116.4081, 39.9157]
+      },
+      "properties": {
+        "name": "王府井",
+        "id": "s002",
+        "line": "1号线",
+        "is_transfer": false
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [116.4225, 39.9088]
+      },
+      "properties": {
+        "name": "东单",
+        "id": "s003",
+        "line": "1号线",
+        "is_transfer": true
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [116.4354, 39.9091]
+      },
+      "properties": {
+        "name": "建国门",
+        "id": "s004",
+        "line": "1号线",
+        "is_transfer": true
+      }
+    }
+  ]
+}

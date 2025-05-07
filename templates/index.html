@@ -1,0 +1,1501 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>地铁路线查询系统</title>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.1.0/mapbox-gl.css" rel="stylesheet">
+    <!-- 添加字体图标库 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body { 
+            margin: 0; 
+            padding: 0; 
+            height: 100vh; 
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .container {
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            display: flex;
+        }
+        #map { 
+            position: relative;
+            width: 70%; 
+            height: 100vh;
+        }
+        .edit-mode-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .edit-mode-btn:hover {
+            background-color: #0056b3;
+        }
+        #clock {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            background-color: rgba(255, 255, 255, 0.8);
+            color: #333;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 16px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .error-message {
+            color: #721c24;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+            padding: 12px 15px;
+            margin: 10px 0;
+            font-weight: 500;
+        }
+        .station-popup {
+            max-width: 250px;
+        }
+        .station-popup h3 {
+            margin: 0 0 5px 0;
+            color: #333;
+        }
+        .station-popup ul {
+            margin: 5px 0;
+            padding-left: 20px;
+        }
+        /* 路径查询面板样式 */
+        #path-finder-panel {
+            width: 30%;
+            height: 100vh;
+            background-color: white;
+            box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        .path-finder-header {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .path-finder-header h2 {
+            margin: 0;
+            color: #0056b3;
+            font-size: 24px;
+        }
+        .path-finder-body {
+            padding: 20px;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .input-section {
+            margin-bottom: 20px;
+        }
+        .input-section label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #495057;
+        }
+        .input-section input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 16px;
+            transition: border-color 0.15s ease-in-out;
+        }
+        .input-section input:focus {
+            border-color: #80bdff;
+            outline: 0;
+            box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+        }
+        .search-btn {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+            transition: all 0.3s;
+            width: 100%;
+            margin-top: 10px;
+        }
+        .search-btn:hover {
+            background-color: #0069d9;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .search-btn:active {
+            transform: translateY(0);
+        }
+        .result-tabs {
+            display: flex;
+            border-bottom: 2px solid #dee2e6;
+            margin-top: 25px;
+        }
+        .result-tab {
+            padding: 12px 18px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            border-bottom: none;
+            border-radius: 6px 6px 0 0;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        .result-tab:hover {
+            background-color: #f0f7ff;
+        }
+        .result-tab.active {
+            border-color: #dee2e6;
+            border-bottom-color: white;
+            background-color: white;
+            color: #0056b3;
+            font-weight: bold;
+        }
+        .result-content {
+            padding: 20px 15px;
+            border: 1px solid #dee2e6;
+            border-top: none;
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            font-style: italic;
+            color: #6c757d;
+        }
+        .loading::after {
+            content: "";
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            vertical-align: middle;
+            margin-left: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* 美化路径查询结果 */
+        .path-overview {
+            background-color: #f8f9fa;
+            border-left: 4px solid #007bff;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .path-overview h4 {
+            color: #0056b3;
+            margin-bottom: 15px;
+            font-weight: bold;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 8px;
+        }
+        .path-info-item {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: rgba(0,0,0,0.02);
+        }
+        .path-info-icon {
+            margin-right: 15px;
+            font-size: 1.2em;
+            width: 24px;
+            text-align: center;
+            color: #0066cc;
+        }
+        .path-details-header {
+            margin: 20px 0 15px 0;
+            padding: 5px 0;
+            color: #0056b3;
+            font-weight: bold;
+            border-bottom: 2px solid #007bff;
+            font-size: 18px;
+        }
+        .start-station {
+            background-color: #e6f7ff;
+            border-left: 4px solid #1890ff;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        .fare-info {
+            background-color: #e8f5e9;
+            border-left: 4px solid #4CAF50;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .fare-info h5 {
+            color: #2e7d32;
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .fare-info ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .fare-info li {
+            margin: 5px 0;
+            color: #1b5e20;
+        }
+        .line-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            margin-right: 8px;
+            border-radius: 20px;
+            color: white;
+            font-weight: bold;
+            font-size: 0.9em;
+            text-shadow: 0px 0px 2px rgba(0,0,0,0.5);
+            box-shadow: 1px 1px 3px rgba(0,0,0,0.2);
+        }
+        .line-section {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+            border-left-width: 6px;
+            border-left-style: solid;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        }
+        .transfer-info {
+            background-color: #fff8e1;
+            padding: 12px 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+            border-left: 4px solid #ffc107;
+            display: flex;
+            align-items: center;
+        }
+        .transfer-icon {
+            margin-right: 10px;
+            font-size: 1.4em;
+            color: #ff8800;
+        }
+        .station-list {
+            margin-left: 15px;
+            list-style-type: none;
+            padding-left: 10px;
+            margin-top: 15px;
+        }
+        .station-list li {
+            position: relative;
+            padding: 10px 5px 10px 25px;
+            border-left: 2px solid #ddd;
+            margin: 0;
+            transition: background-color 0.2s;
+        }
+        .station-list li:hover {
+            background-color: rgba(0,0,0,0.02);
+        }
+        .station-list li:before {
+            content: "";
+            position: absolute;
+            left: -6px;
+            top: 50%;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #007bff;
+            transform: translateY(-50%);
+        }
+        .station-list li:first-child:before {
+            background-color: #4CAF50;
+            width: 12px;
+            height: 12px;
+        }
+        .station-list li:last-child:before {
+            background-color: #E91E63;
+            width: 12px;
+            height: 12px;
+        }
+        .station-list li:last-child {
+            border-left: none;
+        }
+        .station-time-small {
+            font-size: 0.9em;
+            color: #0066cc;
+            background-color: #e6f7ff;
+            padding: 3px 8px;
+            border-radius: 12px;
+            margin-right: 8px;
+            font-weight: bold;
+        }
+        .station-status {
+            font-size: 0.85em;
+            font-weight: bold;
+            margin-left: 5px;
+        }
+        .transfer-status {
+            color: #ff6600;
+        }
+        .start-status {
+            color: #4CAF50;
+        }
+        .end-status {
+            color: #E91E63;
+        }
+        .alert-warning {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            color: #856404;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+
+        /* 新增用于优化格式化结果显示的样式 */
+        .formatted-result {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .journey-header {
+            display: flex;
+            align-items: center;
+            background-color: #e6f7ff;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #1890ff;
+            margin-bottom: 20px;
+        }
+
+        .journey-header i {
+            font-size: 1.6em;
+            color: #1890ff;
+            margin-right: 12px;
+        }
+
+        .metro-line {
+            background-color: #f0f7ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border-left: 4px solid #007bff;
+            display: flex;
+            align-items: center;
+        }
+
+        .metro-line i {
+            font-size: 1.4em;
+            color: #007bff;
+            margin-right: 12px;
+        }
+
+        .journey-segment {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+            padding: 10px;
+            background-color: rgba(255,255,255,0.8);
+            border-radius: 6px;
+        }
+
+        .segment-time {
+            font-weight: bold;
+            color: #0066cc;
+            background-color: #e6f7ff;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            margin-right: 12px;
+        }
+
+        .journey-summary {
+            background-color: #f0f9ff;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            border: 1px solid #d0e8ff;
+        }
+
+        .summary-title {
+            font-weight: bold;
+            color: #0056b3;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #d0e8ff;
+            padding-bottom: 5px;
+            display: flex;
+            align-items: center;
+        }
+
+        .summary-title i {
+            margin-right: 10px;
+            color: #0056b3;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            grid-gap: 10px;
+        }
+
+        .summary-item {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            background-color: rgba(255,255,255,0.6);
+            border-radius: 6px;
+        }
+
+        .summary-item i {
+            margin-right: 8px;
+            color: #0066cc;
+            width: 20px;
+            text-align: center;
+        }
+
+        .fare-box {
+            background-color: #e8f5e9;
+            border-left: 4px solid #4CAF50;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            display: flex;
+            align-items: center;
+        }
+
+        .fare-box i {
+            font-size: 1.4em;
+            color: #4CAF50;
+            margin-right: 15px;
+        }
+
+        .fare-amount {
+            font-weight: bold;
+            font-size: 1.2em;
+            color: #2e7d32;
+        }
+
+        .transfer-count {
+            background-color: #fff8e1;
+            border-left: 4px solid #ffc107;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            display: flex;
+            align-items: center;
+        }
+
+        .transfer-count i {
+            font-size: 1.4em;
+            color: #ff8800;
+            margin-right: 15px;
+        }
+
+        /* 添加时间信息容器样式 */
+        .time-info-container {
+            background-color: #f5f5f5;
+            border-radius: 8px;
+            padding: 12px 15px;
+            margin-top: 15px;
+            border-left: 4px solid #0066cc;
+        }
+
+        /* 添加闪烁动画 */
+        @keyframes pulse {
+            0% { circle-opacity: 0.9; circle-radius: 6; }
+            50% { circle-opacity: 0.5; circle-radius: 10; }
+            100% { circle-opacity: 0.9; circle-radius: 6; }
+        }
+    </style>
+</head>
+<body>
+    <div id="error-container"></div>
+    <div class="container">
+        <div id="map">
+            <!-- 添加明显的编辑模式按钮 -->
+            <a href="/edit" class="edit-mode-btn">进入地图编辑模式</a>
+            <!-- 添加时钟显示 -->
+            <div id="clock"></div>
+        </div>
+        
+        <!-- 路径查询面板 -->
+        <div id="path-finder-panel">
+            <div class="path-finder-header">
+                <h2>地铁路径查询</h2>
+            </div>
+            <div class="path-finder-body">
+                <div class="input-section">
+                    <label for="start-station">起始站点：</label>
+                    <input type="text" id="start-station" list="stations-list" placeholder="请输入起始站点">
+                </div>
+                <div class="input-section">
+                    <label for="end-station">终点站点：</label>
+                    <input type="text" id="end-station" list="stations-list" placeholder="请输入终点站点">
+                </div>
+                <!-- 移除日期类型选择，改为自动判断 -->
+                <button class="search-btn" id="search-path-btn"><i class="bi bi-search"></i> 查询路径</button>
+                
+                <!-- 站点列表数据列表（用于自动完成） -->
+                <datalist id="stations-list"></datalist>
+                
+                <div class="result-tabs">
+                    <div class="result-tab active" data-tab="time-path">最短时间路径</div>
+                    <div class="result-tab" data-tab="transfers-path">最少换乘路径</div>
+                </div>
+                <div class="result-content">
+                    <div class="tab-content active" id="time-path-content">
+                        <div class="loading" id="time-path-loading" style="display: none;">正在查询最短时间路径</div>
+                        <div id="time-path-result"></div>
+                    </div>
+                    <div class="tab-content" id="transfers-path-content">
+                        <div class="loading" id="transfers-path-loading" style="display: none;">正在查询最少换乘路径</div>
+                        <div id="transfers-path-result"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.1.0/mapbox-gl.js"></script>
+    <script>
+        // 错误处理函数
+        function showError(message) {
+            const errorContainer = document.getElementById('error-container');
+            errorContainer.innerHTML = `<div class="error-message">${message}</div>`;
+            console.error(message);
+        }
+
+        // 添加一个全局变量用于存储线路颜色信息
+        let lineColors = {};
+        
+        // 添加全局变量来存储查询结果
+        let shortestPathData = null;
+        let transfersPathData = null;
+        
+        try {
+            // 检查token是否已设置
+            const token = "{{ mapbox_token }}";
+            if (!token) {
+                showError("Mapbox access token未正确配置。请在config.py中设置有效的MAPBOX_TOKEN。");
+                throw new Error("Invalid Mapbox token");
+            }
+            
+            mapboxgl.accessToken = token;
+            
+            // 创建地图
+            const map = new mapboxgl.Map({
+                container: 'map',
+                style: 'mapbox://styles/mapbox/streets-v12',
+                center: [116.3912, 39.9073], // 北京坐标
+                zoom: 12,
+                // 添加北京区域的最大边界限制
+                maxBounds: [
+                    [115.7, 39.4], // 西南角
+                    [117.4, 41.0]  // 东北角
+                ]
+            });
+            
+            // 添加导航控件
+            map.addControl(new mapboxgl.NavigationControl());
+            
+            // 添加全局变量存储高亮路径信息
+            let shortestPathSource = null;
+            let transfersPathSource = null;
+            let shortestPathLayerId = 'shortest-path-layer';
+            let transfersPathLayerId = 'transfers-path-layer';
+            let shortestStationsLayerId = 'shortest-stations-layer';
+            let transfersStationsLayerId = 'transfers-stations-layer';
+            
+            // 直接获取并显示数据，不依赖地图加载事件
+            console.log("开始加载地铁数据");
+            
+            // 预加载站点数据
+            fetch('/api/stations/points')
+                .then(response => response.json())
+                .then(data => {
+                    if (!data || !data.features || !data.features.length) {
+                        console.error("站点数据无效或为空");
+                        return;
+                    }
+                    
+                    // 填充站点列表用于自动完成
+                    const stationsList = document.getElementById('stations-list');
+                    const stations = [];
+                    
+                    data.features.forEach(feature => {
+                        const stationName = feature.properties.station_name;
+                        if (stationName && !stations.includes(stationName)) {
+                            stations.push(stationName);
+                            const option = document.createElement('option');
+                            option.value = stationName;
+                            stationsList.appendChild(option);
+                        }
+                    });
+                    
+                    // 等待地图加载完成
+                    if (map.loaded()) {
+                        addStationsToMap(data);
+                    } else {
+                        map.on('load', () => addStationsToMap(data));
+                    }
+                })
+                .catch(error => {
+                    console.error("加载站点数据出错:", error);
+                    showError(`加载站点数据出错: ${error.message}`);
+                });
+            
+            // 预加载线路数据
+            fetch('/api/stations/lines')
+                .then(response => response.json())
+                .then(data => {
+                    if (!data || !data.features || !data.features.length) {
+                        console.error("线路数据无效或为空");
+                        return;
+                    }
+                    
+                    // 等待地图加载完成
+                    if (map.loaded()) {
+                        addLinesToMap(data);
+                    } else {
+                        map.on('load', () => addLinesToMap(data));
+                    }
+                })
+                .catch(error => {
+                    console.error("加载线路数据出错:", error);
+                    showError(`加载线路数据出错: ${error.message}`);
+                });
+            
+            // 添加站点到地图的函数
+            function addStationsToMap(data) {
+                try {
+                    // 检查源是否已存在
+                    if (map.getSource('subway-stations')) {
+                        map.getSource('subway-stations').setData(data);
+                    } else {
+                        map.addSource('subway-stations', {
+                            type: 'geojson',
+                            data: data
+                        });
+                        
+                        map.addLayer({
+                            id: 'subway-stations-layer',
+                            type: 'circle',
+                            source: 'subway-stations',
+                            paint: {
+                                'circle-radius': 6,
+                                'circle-color': [
+                                    'match',
+                                    ['get', 'line_siz'],
+                                    1, '#3388ff', // 单线站点
+                                    2, '#ff8800', // 换乘站点（2条线）
+                                    3, '#ff0000', // 换乘站点（3条线或以上）
+                                    '#cccccc'     // 默认颜色
+                                ],
+                                'circle-stroke-width': 1.5,
+                                'circle-stroke-color': '#ffffff'
+                            }
+                        });
+                        
+                        map.on('mouseenter', 'subway-stations-layer', function () {
+                            map.getCanvas().style.cursor = 'pointer';
+                        });
+                        
+                        map.on('mouseleave', 'subway-stations-layer', function () {
+                            map.getCanvas().style.cursor = '';
+                        });
+
+                        // 添加点击事件 - 站点
+                        map.on('click', 'subway-stations-layer', function (e) {
+                            const props = e.features[0].properties;
+                            const stationName = props.station_name;
+                            // GeoJSON中属性如果是数组会被自动转为字符串，需要解析
+                            const lines = JSON.parse(props.lines || '[]');
+                            const status = props.status;
+                            
+                            let linesHtml = '';
+                            lines.forEach(line => {
+                                linesHtml += `<li>${line}</li>`;
+                            });
+                            
+                            new mapboxgl.Popup({ className: 'station-popup' })
+                                .setLngLat(e.features[0].geometry.coordinates)
+                                .setHTML(`
+                                    <h3>${stationName}</h3>
+                                    <p>状态: ${status || '正常'}</p>
+                                    <p>线路:</p>
+                                    <ul>${linesHtml}</ul>
+                                `)
+                                .addTo(map);
+                        });
+                    }
+                } catch (error) {
+                    showError(`添加地图图层时出错: ${error.message}`);
+                    console.error('Error adding map layers:', error);
+                }
+            }
+            
+            // 添加线路到地图的函数
+            function addLinesToMap(data) {
+                try {
+                    // 保存线路颜色信息到全局变量
+                    if (data && data.features && data.features.length > 0) {
+                        data.features.forEach(feature => {
+                            const props = feature.properties;
+                            if (props.line_name && props.stroke) {
+                                lineColors[props.line_name] = props.stroke;
+                            }
+                        });
+                    }
+                    
+                    if (map.getSource('subway-lines')) {
+                        map.getSource('subway-lines').setData(data);
+                    } else {
+                        map.addSource('subway-lines', { type: 'geojson', data: data });
+                        
+                        if (map.getLayer('subway-stations-layer')) {
+                            map.addLayer({
+                                id: 'subway-lines-layer',
+                                type: 'line',
+                                source: 'subway-lines',
+                                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                                paint: { 'line-color': ['get', 'stroke'], 'line-width': 4 }
+                            }, 'subway-stations-layer');
+                        } else {
+                            map.addLayer({
+                                id: 'subway-lines-layer',
+                                type: 'line',
+                                source: 'subway-lines',
+                                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                                paint: { 'line-color': ['get', 'stroke'], 'line-width': 4 }
+                            });
+                        }
+                        
+                        map.on('mouseenter', 'subway-lines-layer', function () {
+                            map.getCanvas().style.cursor = 'pointer';
+                        });
+                        map.on('mouseleave', 'subway-lines-layer', function() {
+                            map.getCanvas().style.cursor = '';
+                        });
+                        map.on('click', 'subway-lines-layer', function (e) {
+                            const props = e.features[0].properties;
+                            const lineName = props.line_name || '未知线路';
+                            const color = props.stroke || '#888888';
+                            new mapboxgl.Popup()
+                                .setLngLat(e.lngLat)
+                                .setHTML(`
+                                    <h3>线路: ${lineName}</h3>
+                                    <div style="background-color: ${color}; width: 20px; height: 20px; display: inline-block; margin-right: 5px;"></div>
+                                    <span>线路颜色: ${color}</span>
+                                `)
+                                .addTo(map);
+                        });
+                    }
+                    
+                } catch (error) {
+                    showError(`添加线路图层时出错: ${error.message}`);
+                    console.error('Error adding line layers:', error);
+                }
+            }
+            
+            // 修改高亮显示路径的函数，增加透明度调整和视角跳转功能
+            function highlightPathOnMap(stations, pathType) {
+                // 使用白色点显示路径，不再使用不同颜色区分
+                const color = '#FFFFFF'; // 白色点
+                const circleRadius = 8; // 增大站点圆圈的半径
+                const sourceId = pathType === 'shortest' ? 'shortest-path-source' : 'transfers-path-source';
+                const stationsLayerId = pathType === 'shortest' ? shortestStationsLayerId : transfersStationsLayerId;
+                // 新增：路径线的source和layer id
+                const lineSourceId = `${sourceId}-line`;
+                const lineLayerId = `${sourceId}-line-layer`;
+
+                // 如果站点为空，不进行处理
+                if (!stations || !stations.length) {
+                    return;
+                }
+
+                // 创建站点特征数组
+                const stationFeatures = [];
+                const coordinates = []; // 用于收集站点坐标进行视角跳转
+
+                // 从已加载的站点数据中查找每个站点的坐标
+                if (map.getSource('subway-stations')) {
+                    const stationsData = map.getSource('subway-stations')._data;
+                    
+                    stations.forEach(stationName => {
+                        const feature = stationsData.features.find(f => 
+                            f.properties.station_name === stationName);
+                        
+                        if (feature && feature.geometry && feature.geometry.coordinates) {
+                            // 收集坐标用于视角跳转
+                            coordinates.push(feature.geometry.coordinates);
+                            
+                            // 为每个站点创建一个GeoJSON特征
+                            stationFeatures.push({
+                                type: 'Feature',
+                                geometry: {
+                                    type: 'Point',
+                                    coordinates: feature.geometry.coordinates
+                                },
+                                properties: {
+                                    station_name: stationName
+                                }
+                            });
+                        }
+                    });
+                }
+
+                // 如果找不到坐标，不进行处理
+                if (stationFeatures.length < 2) {
+                    console.error('找不到足够的站点坐标来创建路径');
+                    return;
+                }
+
+                // 新增：创建或更新路径线数据源
+                const lineGeoJSON = {
+                    type: 'FeatureCollection',
+                    features: [{
+                        type: 'Feature',
+                        geometry: {
+                            type: 'LineString',
+                            coordinates: coordinates
+                        },
+                        properties: {}
+                    }]
+                };
+                // 先判断source是否存在，不存在则添加
+                if (!map.getSource(lineSourceId)) {
+                    map.addSource(lineSourceId, { type: 'geojson', data: lineGeoJSON });
+                } else {
+                    map.getSource(lineSourceId).setData(lineGeoJSON);
+                }
+                // 再判断layer是否存在，不存在则添加
+                if (!map.getLayer(lineLayerId)) {
+                    // 只有在stationsLayerId存在时才作为上层插入，否则直接添加
+                    if (map.getLayer(stationsLayerId)) {
+                        map.addLayer({
+                            id: lineLayerId,
+                            type: 'line',
+                            source: lineSourceId,
+                            layout: { 'line-join': 'round', 'line-cap': 'round' },
+                            paint: {
+                                'line-color': color,
+                                'line-width': 7,
+                                'line-opacity': 1
+                            }
+                        }, stationsLayerId);
+                    } else {
+                        map.addLayer({
+                            id: lineLayerId,
+                            type: 'line',
+                            source: lineSourceId,
+                            layout: { 'line-join': 'round', 'line-cap': 'round' },
+                            paint: {
+                                'line-color': color,
+                                'line-width': 7,
+                                'line-opacity': 1
+                            }
+                        });
+                    }
+                }
+
+                // 创建或更新站点数据源
+                if (map.getSource(`${sourceId}-stations`)) {
+                    // 如果数据源已存在，则更新数据
+                    map.getSource(`${sourceId}-stations`).setData({
+                        type: 'FeatureCollection',
+                        features: stationFeatures
+                    });
+                } else {
+                    // 创建站点数据源
+                    map.addSource(`${sourceId}-stations`, {
+                        type: 'geojson',
+                        data: {
+                            type: 'FeatureCollection',
+                            features: stationFeatures
+                        }
+                    });
+                    // 添加站点高亮图层，只有在不存在时才添加
+                    if (!map.getLayer(stationsLayerId)) {
+                        map.addLayer({
+                            id: stationsLayerId,
+                            type: 'circle',
+                            source: `${sourceId}-stations`,
+                            paint: {
+                                'circle-radius': [
+                                    'interpolate',
+                                    ['linear'],
+                                    ['get', 'pulse'],
+                                    0, circleRadius,
+                                    1, circleRadius * 1.8
+                                ],
+                                'circle-color': color,
+                                'circle-stroke-width': 3,
+                                'circle-stroke-color': color,
+                                'circle-stroke-opacity': [
+                                    'interpolate',
+                                    ['linear'],
+                                    ['get', 'pulse'],
+                                    0, 1,
+                                    1, 0.8
+                                ],
+                                'circle-opacity': [
+                                    'interpolate',
+                                    ['linear'],
+                                    ['get', 'pulse'],
+                                    0, 1.0,
+                                    1, 0.9
+                                ]
+                            }
+                        });
+                    }
+                }
+
+                // 确保图层可见
+                if (map.getLayer(stationsLayerId)) {
+                    map.setLayoutProperty(stationsLayerId, 'visibility', 'visible');
+                }
+                if (map.getLayer(lineLayerId)) {
+                    map.setLayoutProperty(lineLayerId, 'visibility', 'visible');
+                }
+
+                // 创建闪烁动画
+                let step = 0;
+                if (window.pulseInterval) clearInterval(window.pulseInterval);
+
+                window.pulseInterval = setInterval(() => {
+                    step = (step + 1) % 100;
+                    const animationValue = Math.abs(Math.sin(step / 50 * Math.PI));
+                    // 点动画
+                    if (map.getSource(`${sourceId}-stations`)) {
+                        const features = map.getSource(`${sourceId}-stations`)._data.features;
+                        features.forEach(feature => {
+                            feature.properties.pulse = animationValue;
+                        });
+                        map.getSource(`${sourceId}-stations`).setData({
+                            type: 'FeatureCollection',
+                            features: features
+                        });
+                    }
+                    // 线动画：通过透明度实现闪烁
+                    if (map.getLayer(lineLayerId)) {
+                        map.setPaintProperty(lineLayerId, 'line-opacity', 0.5 + 0.5 * animationValue);
+                    }
+                }, 50);
+
+                // 添加视角跳转功能
+                if (coordinates.length >= 2) {
+                    // 计算包含所有站点的边界框
+                    const bounds = coordinates.reduce((bounds, coord) => {
+                        return bounds.extend(coord);
+                    }, new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
+                    
+                    // 平滑过渡到新视角，适当放大以显示完整路径
+                    map.fitBounds(bounds, {
+                        padding: 100,     // 边界周围的内边距(像素)
+                        maxZoom: 14,      // 限制最大缩放级别
+                        duration: 1500,   // 动画持续时间(毫秒)
+                        linear: false     // 使用缓动动画
+                    });
+                }
+            }
+
+            // 修改清除高亮路径的函数
+            function clearHighlightedPaths() {
+                // 停止动画计时器
+                if (window.pulseInterval) {
+                    clearInterval(window.pulseInterval);
+                    window.pulseInterval = null;
+                }
+
+                // 隐藏所有路径图层
+                const layersToHide = [
+                    shortestStationsLayerId,
+                    transfersStationsLayerId,
+                    'shortest-path-source-line-layer',
+                    'transfers-path-source-line-layer'
+                ];
+                layersToHide.forEach(layerId => {
+                    if (map.getLayer(layerId)) {
+                        map.setLayoutProperty(layerId, 'visibility', 'none');
+                    }
+                });
+            }
+            
+            // 根据线路名称获取颜色
+            function getLineColor(lineName) {
+                // 如果有缓存颜色，则使用缓存
+                if (lineColors[lineName]) {
+                    return lineColors[lineName];
+                }
+                
+                // 如果没有缓存，使用默认颜色映射或返回默认颜色
+                const defaultColors = {
+                    "地铁1号线": "#CC0000",
+                    "地铁2号线": "#0070FF",
+                    "地铁4号线": "#00A86B",
+                    "地铁5号线": "#A42497",
+                    "地铁6号线": "#FF7F00",
+                    "地铁7号线": "#FFC076",
+                    "地铁8号线": "#009B6B",
+                    "地铁9号线": "#8FC41E",
+                    "地铁10号线": "#009DFF",
+                    "地铁13号线": "#FFDE00",
+                    "地铁14号线": "#D6A461",
+                    "地铁15号线": "#702785",
+                    "地铁16号线": "#97D700",
+                    "八通线": "#CC0000",
+                    "亦庄线": "#DC1771",
+                    "昌平线": "#FF95CA",
+                    "房山线": "#F9E701",
+                    "S1线": "#6D3F97"
+                };
+                
+                // 部分匹配线路名称
+                for (const key in defaultColors) {
+                    if (lineName && lineName.includes(key)) {
+                        return defaultColors[key];
+                    }
+                }
+                
+                // 默认颜色
+                return "#888888";
+            }
+            
+            // 自动判断当前是工作日还是休息日
+            function detectDateType() {
+                const today = new Date();
+                const day = today.getDay(); // 0是周日，1-5是周一至周五，6是周六
+                
+                // 判断是否为工作日（周一至周五）
+                return (day >= 1 && day <= 5) ? '工作日' : '双休日';
+            }
+            
+            // 修改选项卡切换功能，在切换时显示相应路径
+            document.addEventListener('DOMContentLoaded', function() {
+                // 初始化选项卡切换功能
+                const resultTabs = document.querySelectorAll('.result-tab');
+                resultTabs.forEach(tab => {
+                    tab.addEventListener('click', function() {
+                        // 切换选项卡状态
+                        resultTabs.forEach(t => t.classList.remove('active'));
+                        this.classList.add('active');
+                        
+                        // 切换内容显示
+                        const tabContents = document.querySelectorAll('.tab-content');
+                        tabContents.forEach(content => content.classList.remove('active'));
+                        document.getElementById(`${this.dataset.tab}-content`).classList.add('active');
+                        
+                        // 显示对应的路径，隐藏其他路径
+                        clearHighlightedPaths(); // 先清除所有路径
+                        
+                        // 根据当前激活的选项卡显示对应路径
+                        const activeTab = this.dataset.tab;
+                        if (activeTab === 'time-path' && shortestPathData && shortestPathData.path) {
+                            highlightPathOnMap(shortestPathData.path, 'shortest');
+                        } else if (activeTab === 'transfers-path' && transfersPathData && transfersPathData.path) {
+                            highlightPathOnMap(transfersPathData.path, 'transfers');
+                        }
+                    });
+                });
+                
+                // 设置路径查询按钮事件
+                document.getElementById('search-path-btn').addEventListener('click', function() {
+                    searchPath();
+                });
+                
+                // 添加输入框回车键触发查询
+                document.getElementById('start-station').addEventListener('keypress', function(event) {
+                    if (event.key === 'Enter') {
+                        document.getElementById('end-station').focus();
+                    }
+                });
+                
+                document.getElementById('end-station').addEventListener('keypress', function(event) {
+                    if (event.key === 'Enter') {
+                        searchPath();
+                    }
+                });
+            });
+            
+            // 修改路径查询函数以确保先清除路径再查询新路径
+            function searchPath() {
+                const startStation = document.getElementById('start-station').value.trim();
+                const endStation = document.getElementById('end-station').value.trim();
+                const dateType = detectDateType(); // 自动判断日期类型
+                
+                // 验证输入
+                if (!startStation || !endStation) {
+                    showError('请输入起始站和终点站');
+                    return;
+                }
+                
+                // 清除先前的路径高亮和保存的路径数据
+                clearHighlightedPaths();
+                shortestPathData = null;
+                transfersPathData = null;
+                
+                // 查询最短时间路径
+                searchTimePath(startStation, endStation, dateType);
+                
+                // 查询最少换乘路径
+                searchTransfersPath(startStation, endStation);
+            }
+            
+            // 修改查询最短时间路径函数
+            function searchTimePath(startStation, endStation, dateType) {
+                // 显示加载状态
+                document.getElementById('time-path-loading').style.display = 'block';
+                document.getElementById('time-path-result').innerHTML = '';
+                
+                // 发送API请求
+                fetch('/api/path/shortest_time', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        start_station: startStation,
+                        end_station: endStation,
+                        date_type: dateType
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // 隐藏加载状态
+                    document.getElementById('time-path-loading').style.display = 'none';
+                    
+                    if (data.error) {
+                        document.getElementById('time-path-result').innerHTML = `<div class="error-message">${data.error}</div>`;
+                        return;
+                    }
+                    
+                    // 显示结果
+                    formatPathResult(data, 'time-path-result');
+                    
+                    // 保存结果数据
+                    shortestPathData = data;
+                    
+                    // 只有当"最短时间路径"选项卡激活时才显示路径
+                    if (document.querySelector('.result-tab[data-tab="time-path"]').classList.contains('active')) {
+                        // 高亮显示路径
+                        if (data.path && data.path.length > 0) {
+                            highlightPathOnMap(data.path, 'shortest');
+                        }
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('time-path-loading').style.display = 'none';
+                    document.getElementById('time-path-result').innerHTML = `<div class="error-message">查询出错: ${error.message}</div>`;
+                    console.error('查询最短时间路径出错:', error);
+                });
+            }
+            
+            // 修改查询最少换乘路径函数
+            function searchTransfersPath(startStation, endStation) {
+                // 显示加载状态
+                document.getElementById('transfers-path-loading').style.display = 'block';
+                document.getElementById('transfers-path-result').innerHTML = '';
+                
+                // 发送API请求
+                fetch('/api/path/least_transfers', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        start_station: startStation,
+                        end_station: endStation
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // 隐藏加载状态
+                    document.getElementById('transfers-path-loading').style.display = 'none';
+                    
+                    if (data.error) {
+                        document.getElementById('transfers-path-result').innerHTML = `<div class="error-message">${data.error}</div>`;
+                        return;
+                    }
+                    
+                    // 显示结果
+                    formatPathResult(data, 'transfers-path-result');
+                    
+                    // 保存结果数据
+                    transfersPathData = data;
+                    
+                    // 只有当"最少换乘路径"选项卡激活时才显示路径
+                    if (document.querySelector('.result-tab[data-tab="transfers-path"]').classList.contains('active')) {
+                        // 高亮显示路径
+                        if (data.path && data.path.length > 0) {
+                            highlightPathOnMap(data.path, 'transfers');
+                        }
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('transfers-path-loading').style.display = 'none';
+                    document.getElementById('transfers-path-result').innerHTML = `<div class="error-message">查询出错: ${error.message}</div>`;
+                    console.error('查询最少换乘路径出错:', error);
+                });
+            }
+            
+            // 修改格式化路径结果函数，添加图标和改进显示
+            function formatPathResult(data, elementId) {
+                const resultElement = document.getElementById(elementId);
+                
+                if (data.formatted_result) {
+                    // 格式化纯文本结果，使其更美观
+                    const formattedText = data.formatted_result;
+                    let htmlContent = `<div class="formatted-result">`;
+                    
+                    // 将纯文本转换为结构化HTML
+                    const lines = formattedText.split('\n');
+                    
+                    // 旅程起点 - 确保即使格式有变化也能正确识别
+                    if (lines[0] && (lines[0].startsWith('从') || lines[0].includes('→'))) {
+                        htmlContent += `<div class="journey-header">
+                            <i class="bi bi-geo-alt-fill"></i>
+                            <strong>${lines[0]}</strong>
+                        </div>`;
+                    }
+                    
+                    // 路径详情处理
+                    let i = 1;
+                    let currentLine = null;
+                    let currentSection = [];
+                    
+                    while (i < lines.length) {
+                        // 跳过空行
+                        if (!lines[i] || lines[i].trim() === '') {
+                            i++;
+                            continue;
+                        }
+                        
+                        // 处理线路信息 - 乘坐线路
+                        if (lines[i].startsWith('从') && lines[i].includes('乘坐')) {
+                            const lineName = lines[i].split('乘坐')[1].trim();
+                            const lineColor = getLineColor(lineName);
+                            
+                            htmlContent += `<div class="metro-line">
+                                <i class="bi bi-train-front-fill"></i>
+                                <div>
+                                    <span class="line-badge" style="background-color: ${lineColor};">
+                                        ${lineName}
+                                    </span>
+                                </div>
+                            </div>`;
+                            currentLine = lineName;
+                        } 
+                        // 处理换乘信息
+                        else if (lines[i].startsWith('在') && lines[i].includes('换乘')) {
+                            htmlContent += `<div class="transfer-info">
+                                <i class="bi bi-arrow-repeat"></i>
+                                <div>${lines[i]}</div>
+                            </div>`;
+                            
+                            // 更新当前线路
+                            const parts = lines[i].split('换乘');
+                            if (parts.length > 1) {
+                                currentLine = parts[1].trim();
+                            }
+                        }
+                        // 处理站点间连接信息，但不显示时间
+                        else if (lines[i].includes('→') && lines[i].includes('(') && lines[i].includes(')')) {
+                            // 提取站点名称和线路信息
+                            const parts = lines[i].split(':');
+                            if (parts.length >= 1) {
+                                const stationInfo = parts[0].trim();
+                                
+                                // 提取站点名称
+                                const stationMatch = stationInfo.match(/(.+)\s+→\s+(.+)\s+\((.+)\)/);
+                                if (stationMatch) {
+                                    const fromStation = stationMatch[1].trim();
+                                    const toStation = stationMatch[2].trim();
+                                    
+                                    // 只显示站点连接，不显示时间
+                                    htmlContent += `<div class="journey-segment">
+                                        <span><i class="bi bi-arrow-right-circle"></i> ${fromStation} → ${toStation}</span>
+                                    </div>`;
+                                }
+                            }
+                        }
+                        // 处理总结信息
+                        else if (lines[i].startsWith('总行程:') || lines[i].startsWith('总距离:') || 
+                                lines[i].startsWith('票价:') || lines[i].startsWith('换乘次数:')) {
+                            
+                            if (lines[i].startsWith('票价:')) {
+                                const fareAmount = lines[i].split(':')[1].trim();
+                                htmlContent += `<div class="fare-box">
+                                    <i class="bi bi-cash-coin"></i>
+                                    <div>
+                                        <span>票价: </span>
+                                        <span class="fare-amount">${fareAmount}</span>
+                                    </div>
+                                </div>`;
+                            } else if (lines[i].startsWith('总行程:')) {
+                                // 总行程信息
+                                htmlContent += `<div class="summary-item" style="margin-top:15px;">
+                                    <i class="bi bi-info-circle-fill"></i>
+                                    <span>${lines[i]}</span>
+                                </div>`;
+                            } else if (lines[i].startsWith('总距离:')) {
+                                htmlContent += `<div class="summary-item">
+                                    <i class="bi bi-rulers"></i>
+                                    <span>${lines[i]}</span>
+                                </div>`;
+                            } else if (lines[i].startsWith('换乘次数:')) {
+                                const transfersCount = lines[i].split(':')[1].trim();
+                                htmlContent += `<div class="transfer-count">
+                                    <i class="bi bi-arrow-repeat"></i>
+                                    <div>
+                                        <span>换乘次数: </span>
+                                        <strong>${transfersCount}</strong>
+                                    </div>
+                                </div>`;
+                            }
+                        } 
+                        else {
+                            // 其他不需要特殊处理的行
+                            htmlContent += `<div class="info-line">${lines[i]}</div>`;
+                        }
+                        
+                        i++;
+                    }
+                    
+                    // 添加行程摘要显示（显示等车时间等）
+                    if (data.time_summary) {
+                        htmlContent += `<div class="journey-summary">
+                            <div class="summary-title">
+                                <i class="bi bi-clock-history"></i>
+                                行程详情
+                            </div>
+                            <div class="summary-grid">`;
+                        
+                        if (data.total_time) {
+                            htmlContent += `<div class="summary-item">
+                                <i class="bi bi-stopwatch"></i>
+                                <span>总行程时间: ${data.total_time.toFixed(1)} 分钟</span>
+                            </div>`;
+                        }
+                        
+                        if (data.time_summary.wait_time) {
+                            htmlContent += `<div class="summary-item">
+                                <i class="bi bi-hourglass"></i>
+                                <span>等待时间: ${data.time_summary.wait_time} 分钟</span>
+                            </div>`;
+                        }
+                        
+                        if (data.time_summary.travel_time) {
+                            htmlContent += `<div class="summary-item">
+                                <i class="bi bi-speedometer"></i>
+                                <span>行驶时间: ${data.time_summary.travel_time} 分钟</span>
+                            </div>`;
+                        }
+                        
+                        if (data.time_summary.transfer_time) {
+                            htmlContent += `<div class="summary-item">
+                                <i class="bi bi-arrow-left-right"></i>
+                                <span>换乘时间: ${data.time_summary.transfer_time} 分钟</span>
+                            </div>`;
+                        }
+                        
+                        htmlContent += `</div></div>`;
+                    }
+                    
+                    // 显示出发和预计到达时间
+                    if (data.departure_time && data.arrival_time) {
+                        const departureTime = new Date(data.departure_time);
+                        const arrivalTime = new Date(data.arrival_time);
+                        
+                        htmlContent += `
+                        <div class="time-info-container">
+                            <div class="journey-segment">
+                                <span class="segment-time">${departureTime.toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'})}</span>
+                                <span><i class="bi bi-clock"></i> 出发时间</span>
+                            </div>
+                            <div class="journey-segment">
+                                <span class="segment-time">${arrivalTime.toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'})}</span>
+                                <span><i class="bi bi-clock-fill"></i> 预计到达时间</span>
+                            </div>
+                        </div>`;
+                    }
+                    
+                    // 添加票价显示 - 直接使用API返回的fare字段
+                    if (data.fare) {
+                        htmlContent += `<div class="fare-box">
+                            <i class="bi bi-cash-coin"></i>
+                            <div>
+                                <span>票价: </span>
+                                <span class="fare-amount">${data.fare}元</span>
+                            </div>
+                        </div>`;
+                    }
+                    
+                    htmlContent += `</div>`;
+                    resultElement.innerHTML = htmlContent;
+                    return;
+                }
+                
+                // 如果没有formatted_result，使用现有的对象数据格式化方法
+                // ...existing code...
+            }
+            
+            // 监听地图错误事件
+            map.on('error', function(e) {
+                showError(`地图加载错误: ${e.error.message || '未知错误'}`);
+                console.error('Map error:', e.error);
+            });
+            
+            // 更新时钟功能
+            function updateClock() {
+                const now = new Date();
+                const hours = now.getHours().toString().padStart(2, '0');
+                const minutes = now.getMinutes().toString().padStart(2, '0');
+                const seconds = now.getSeconds().toString().padStart(2, '0');
+                const timeString = `${hours}:${minutes}:${seconds}`;
+                document.getElementById('clock').textContent = timeString;
+            }
+            
+            // 初始化并启动时钟
+            updateClock();
+            setInterval(updateClock, 1000);
+            
+        } catch (error) {
+            showError(`初始化地图时出错: ${error.message}`);
+            console.error('Map initialization error:', error);
+        }
+    </script>
+</body>
+</html>

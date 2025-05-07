@@ -1,0 +1,20 @@
+# Web 框架
+flask==2.2.3
+flask-wtf==1.1.1
+wtforms==3.0.1
+
+# 数据处理
+networkx==3.1
+geopy==2.3.0
+geojson==3.1.0
+
+# 环境变量和配置
+python-dotenv==1.0.0
+
+# 可视化和地图
+plotly==5.14.0
+
+# 打包工具
+pyinstaller==6.2.0
+
+
